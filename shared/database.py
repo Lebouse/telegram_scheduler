@@ -1,14 +1,10 @@
-# shared/database.py
-
 import sqlite3
 import threading
+import datetime
 from contextlib import contextmanager
 from config import DATABASE_PATH
 
-# Глобальный lock для SQLite (на всякий случай)
 _db_lock = threading.RLock()
-
-# shared/database.py
 
 def init_db():
     with get_db_connection() as conn:
@@ -28,7 +24,9 @@ def init_db():
                 notify BOOLEAN NOT NULL DEFAULT 1,
                 delete_after_days INTEGER,
                 active BOOLEAN NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                max_end_date TEXT,
+                task_hash TEXT
             )
         ''')
         conn.commit()
@@ -43,36 +41,4 @@ def get_db_connection():
         finally:
             conn.close()
 
-def add_scheduled_message(data: dict) -> int:
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO scheduled_messages
-            (chat_id, text, photo_file_id, document_file_id, caption, publish_at,
-             original_publish_at, recurrence, pin, notify, delete_after_days, active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['chat_id'], data['text'], data['photo_file_id'], data['document_file_id'],
-            data['caption'], data['publish_at'], data['publish_at'], data['recurrence'],
-            data['pin'], data['notify'], data['delete_after_days'], True
-        ))
-        msg_id = cursor.lastrowid
-        conn.commit()
-        return msg_id
-
-def get_all_active_messages():
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scheduled_messages WHERE active = 1 ORDER BY publish_at")
-        rows = cursor.fetchall()
-        return rows
-
-def deactivate_message(msg_id: int):
-    with get_db_connection() as conn:
-        conn.execute("UPDATE scheduled_messages SET active = 0 WHERE id = ?", (msg_id,))
-        conn.commit()
-
-def update_next_publish_time(msg_id: int, next_time_iso: str):
-    with get_db_connection() as conn:
-        conn.execute("UPDATE scheduled_messages SET publish_at = ? WHERE id = ?", (next_time_iso, msg_id))
-        conn.commit()
+# ... (остальные функции: add_scheduled_message, get_all_active_messages и т.д. из предыдущих сообщений)
