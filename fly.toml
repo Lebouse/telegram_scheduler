@@ -1,4 +1,4 @@
-app = "my-telegram-scheduler"
+app = "telegram-reminder-scheduler"
 kill_signal = "SIGINT"
 kill_timeout = 5
 primary_region = "fra"
