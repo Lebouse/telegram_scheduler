@@ -1,7 +1,8 @@
 # config.py
 
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
-AUTHORIZED_USER_IDS = {123456789}  # ← замените!
+import os
 
-DATABASE_PATH = "scheduled_messages.db"
-TIMEZONE = "Europe/Moscow"  # ← укажите ваш часовой пояс (важно для повторов)
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+AUTHORIZED_USER_IDS = {int(x.strip()) for x in os.environ["AUTHORIZED_USER_IDS"].split(",")}
+DATABASE_PATH = "/data/scheduled_messages.db"  # ← данные будут в volume
+TIMEZONE = os.getenv("TIMEZONE", "UTC")
