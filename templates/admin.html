@@ -175,10 +175,12 @@
         </header>
 
         <div class="controls">
-            <a href="/admin/export.csv" class="csv-link">📥 Экспорт в CSV</a>
+            {% set export_url = "/admin/export.csv?secret=" + request.query_params.get('secret', '') %}
+            <a href="{{ export_url }}" class="csv-link">📥 Экспорт в CSV</a>
             
             <div class="chat-filter">
                 <form method="get">
+                    <input type="hidden" name="secret" value="{{ request.query_params.get('secret', '') }}">
                     <label><strong>Фильтр по чату:</strong></label>
                     <select name="chat_filter" onchange="this.form.submit()">
                         <option value="">Все чаты ({{ active_count }})</option>
@@ -205,7 +207,7 @@
         <div class="form-section">
             <h2>{% if edit_task.id %}Редактирование напоминания #{{ edit_task.id }}{% else %}Создать новое напоминание{% endif %}</h2>
             <form method="post" action="{% if edit_task.id %}/admin/edit/{{ edit_task.id }}{% else %}/admin/create{% endif %}">
-                <input type="hidden" name="x_admin_secret" value="{{ request.headers.get('X-Admin-Secret', '') }}">
+                <input type="hidden" name="secret" value="{{ request.query_params.get('secret', '') }}">
 
                 <div class="form-group">
                     <label>Чат ID:</label>
@@ -236,110 +238,4 @@
                     <div class="radio-group">
                         <label><input type="radio" name="recurrence" value="once" {% if edit_task.recurrence == 'once' %}checked{% endif %}> Один раз</label>
                         <label><input type="radio" name="recurrence" value="daily" {% if edit_task.recurrence == 'daily' %}checked{% endif %}> Ежедневно</label>
-                        <label><input type="radio" name="recurrence" value="weekly" {% if edit_task.recurrence == 'weekly' %}checked{% endif %}> Еженедельно</label>
-                        <label><input type="radio" name="recurrence" value="monthly" {% if edit_task.recurrence == 'monthly' %}checked{% endif %}> Ежемесячно</label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Удалить напоминание через:</label>
-                    <div class="radio-group">
-                        <label><input type="radio" name="delete_after_days" value="1" {% if edit_task.delete_after_days == 1 %}checked{% endif %}> 1 день</label>
-                        <label><input type="radio" name="delete_after_days" value="2" {% if edit_task.delete_after_days == 2 %}checked{% endif %}> 2 дня</label>
-                        <label><input type="radio" name="delete_after_days" value="3" {% if edit_task.delete_after_days == 3 %}checked{% endif %}> 3 дня</label>
-                        <label><input type="radio" name="delete_after_days" value="" {% if not edit_task.delete_after_days %}checked{% endif %}> Никогда</label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" name="pin" {% if edit_task.pin %}checked{% endif %}>
-                        Закрепить сообщение
-                    </label>
-                </div>
-
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" name="notify" {% if edit_task.notify %}checked{% endif %}>
-                        Оповестить участников (отправить без уведомления)
-                    </label>
-                </div>
-
-                <button type="submit">Сохранить</button>
-                <a href="/admin" class="cancel-btn">Отмена</a>
-            </form>
-        </div>
-        {% endif %}
-
-        <!-- Список задач -->
-        <div style="padding: 0 20px 20px;">
-            <h2>Активные напоминания ({{ active_count }})</h2>
-            {% if not edit_task %}
-                <a href="/admin" style="display: inline-block; margin: 10px 0; padding: 8px 16px; background: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">➕ Создать напоминание</a>
-            {% endif %}
-
-            {% if tasks %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Чат</th>
-                        <th>Контент</th>
-                        <th>Публикация</th>
-                        <th>Повтор</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for task in tasks %}
-                    <tr>
-                        <td>{{ task.id }}</td>
-                        <td>{{ chat_titles.get(task.chat_id, task.chat_id) }}</td>
-                        <td>
-                            {% if task.photo_file_id %}
-                                <span class="media-indicator">🖼️ Фото</span>
-                            {% elif task.document_file_id %}
-                                <span class="media-indicator">📄 PDF</span>
-                            {% else %}
-                                {{ task.text | truncate(60) }}
-                            {% endif %}
-                        </td>
-                        <td>{{ task.publish_at[:16] }}</td>
-                        <td>
-                            {% if task.recurrence == 'once' %}Один раз
-                            {% elif task.recurrence == 'daily' %}Ежедневно
-                            {% elif task.recurrence == 'weekly' %}Еженедельно
-                            {% elif task.recurrence == 'monthly' %}Ежемесячно
-                            {% else %}{{ task.recurrence }}
-                            {% endif %}
-                        </td>
-                        <td class="actions">
-                            <form method="post" action="/admin/delete/{{ task.id }}" style="display:inline;" onsubmit="return confirm('Удалить напоминание?')">
-                                <input type="hidden" name="x_admin_secret" value="{{ request.headers.get('X-Admin-Secret', '') }}">
-                                <button type="submit" class="delete-btn">Удалить</button>
-                            </form>
-                            <a href="/admin/edit/{{ task.id }}"><button class="edit-btn">Редактировать</button></a>
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-                <p>Нет активных напоминаний.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <script>
-        // Автоматически подставляем X-Admin-Secret в формы
-        document.addEventListener('DOMContentLoaded', () => {
-            const secret = new URLSearchParams(window.location.search).get('secret');
-            if (secret) {
-                document.querySelectorAll('input[name="x_admin_secret"]').forEach(input => {
-                    input.value = secret;
-                });
-            }
-        });
-    </script>
-</body>
-</html>
+                        <label><input type="radio" name="recurrence" value="weekly" {% if edit_task.recurrence == 'weekly' %}checked{% endif %}>
