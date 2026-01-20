@@ -226,9 +226,9 @@
             <h2>{% if edit_task and edit_task.id %}Редактирование напоминания #{{ edit_task.id }}{% else %}Создать новое напоминание{% endif %}</h2>
             
             {% if edit_task and edit_task.id %}
-                <form method="post" action="/admin/edit/{{ edit_task.id }}" id="task-form">
+                <form method="post" action="/admin/edit/{{ edit_task.id }}" enctype="application/x-www-form-urlencoded">
             {% else %}
-                <form method="post" action="/admin/create" id="task-form">
+                <form method="post" action="/admin/create" enctype="application/x-www-form-urlencoded">
             {% endif %}
             
                 <input type="hidden" name="secret" value="{{ current_secret }}">
@@ -344,9 +344,9 @@
                             {% endif %}
                         </td>
                         <td class="actions">
-                            <form method="post" action="/admin/delete/{{ task.id }}" style="display:inline;" onsubmit="return confirm('Удалить напоминание?')">
+                            <form method="post" action="/admin/delete/{{ task.id }}" style="display:inline;" enctype="application/x-www-form-urlencoded">
                                 <input type="hidden" name="secret" value="{{ current_secret }}">
-                                <button type="submit" class="delete-btn">Удалить</button>
+                                <button type="submit" class="delete-btn" onclick="return confirm('Удалить напоминание?')">Удалить</button>
                             </form>
                             <a href="/admin/edit/{{ task.id }}?secret={{ current_secret }}"><button class="edit-btn">Редактировать</button></a>
                         </td>
@@ -368,18 +368,41 @@
             
             // Добавляем секрет ко всем ссылкам
             document.querySelectorAll('a[href]').forEach(a => {
-                const url = new URL(a.href, window.location.href);
+                const url = new URL(a.href, window.location.origin);
                 if (url.origin === window.location.origin && !url.searchParams.has('secret')) {
                     url.searchParams.set('secret', secret);
                     a.href = url.toString();
                 }
             });
             
-            // Убираем обработчик отправки формы (пусть браузер сам отправляет POST)
-            const form = document.getElementById('task-form');
-            if (form) {
-                form.onsubmit = null; // Отключаем кастомную обработку
+            // Скрытое поле секрета для всех форм
+            document.querySelectorAll('form').forEach(form => {
+                if (!form.querySelector('input[name="secret"]')) {
+                    const secretInput = document.createElement('input');
+                    secretInput.type = 'hidden';
+                    secretInput.name = 'secret';
+                    secretInput.value = secret;
+                    form.appendChild(secretInput);
+                }
+            });
+        });
+        
+        // Функция для отладки отправки формы
+        function debugFormSubmit(event) {
+            const form = event.target;
+            const formData = new FormData(form);
+            console.log('Отправка формы:');
+            for (const [key, value] of formData.entries()) {
+                console.log(`${key}: ${value}`);
             }
+            return true; // Разрешаем отправку
+        }
+        
+        // Добавляем обработчик для отладки
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('form').forEach(form => {
+                form.onsubmit = debugFormSubmit;
+            });
         });
     </script>
 </body>
