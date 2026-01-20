@@ -1,5 +1,5 @@
 # web_api.py
-# Полностью обновленная версия с middleware и корректной обработкой секретов
+# ФИНАЛЬНАЯ РАБОЧАЯ ВЕРСИЯ с исправлением обеих ошибок
 # Порт: 8081
 # Секрет админки: qwerty12345
 
@@ -139,11 +139,6 @@ async def admin_secret_middleware(request: Request, call_next):
             request.url.path.startswith(path) for path in protected_paths
         ) and not request.url.path.startswith("/admin/export.csv")
         
-        # Логируем для отладки
-        if is_protected:
-            logger.debug(f"Проверка доступа к защищённому эндпоинту: {request.url.path}")
-            logger.debug(f"Секреты: header={secret_from_header}, query={secret_from_query}, form={secret_from_form}")
-        
         # Если защищённый эндпоинт и секрет не совпадает
         if is_protected and ADMIN_SECRET and actual_secret != ADMIN_SECRET:
             logger.warning(
@@ -175,20 +170,6 @@ async def admin_secret_middleware(request: Request, call_next):
         
         # Передаём управление следующему обработчику
         response = await call_next(request)
-        
-        # Для редиректов добавляем секрет в URL
-        if 300 <= response.status_code < 400 and actual_secret:
-            location = response.headers.get("Location", "")
-            if location and "secret=" not in location:
-                # Разбираем URL
-                url_parts = list(urlparse(location))
-                query = dict(urlparse(location).query)
-                query.update({"secret": actual_secret})
-                url_parts[4] = "&".join([f"{k}={v}" for k, v in query.items()])
-                new_location = urlunparse(url_parts)
-                response.headers["Location"] = new_location
-                logger.debug(f"Добавлен секрет в редирект: {location} → {new_location}")
-        
         return response
     
     except Exception as e:
@@ -339,38 +320,55 @@ async def admin_panel(
     Поддерживает секрет как из заголовка, так и из URL параметра.
     """
     try:
+        logger.info(f"Запрос к /admin с параметрами: chat_filter={chat_filter}, secret={secret}, create={create}, error={error}")
+        
         # Получаем все активные задачи
         tasks = get_all_active_messages()
+        logger.info(f"Загружено {len(tasks)} активных задач")
         
         # Фильтрация по чату
         if chat_filter and chat_filter.lstrip('-').isdigit():
             chat_filter = int(chat_filter)
             tasks = [t for t in tasks if t['chat_id'] == chat_filter]
+            logger.info(f"После фильтрации по чату {chat_filter} осталось {len(tasks)} задач")
 
         # Уникальные чаты
         unique_chats = sorted({t['chat_id'] for t in tasks})
+        logger.info(f"Уникальные чаты: {unique_chats}")
+        
         chat_titles = {}
         for cid in unique_chats:
-            chat_titles[cid] = await get_chat_title_cached(cid)
+            try:
+                chat_titles[cid] = await get_chat_title_cached(cid)
+                logger.info(f"Название чата {cid}: {chat_titles[cid]}")
+            except Exception as e:
+                logger.error(f"Ошибка получения названия чата {cid}: {e}")
+                chat_titles[cid] = f"Чат {cid}"
 
         # Подготовка данных для шаблона
         task_dicts = []
         for row in tasks:
-            task_dicts.append({
-                'id': row['id'],
-                'chat_id': row['chat_id'],
-                'text': row['text'],
-                'photo_file_id': row['photo_file_id'],
-                'document_file_id': row['document_file_id'],
-                'caption': row['caption'],
-                'publish_at': row['publish_at'],
-                'recurrence': row['recurrence'],
-                'pin': bool(row['pin']),
-                'notify': bool(row['notify']),
-                'delete_after_days': row['delete_after_days'],
-                'active': row['active']
-            })
+            try:
+                task_dicts.append({
+                    'id': row['id'],
+                    'chat_id': row['chat_id'],
+                    'text': row['text'],
+                    'photo_file_id': row['photo_file_id'],
+                    'document_file_id': row['document_file_id'],
+                    'caption': row['caption'],
+                    'publish_at': row['publish_at'],
+                    'recurrence': row['recurrence'],
+                    'pin': bool(row['pin']),
+                    'notify': bool(row['notify']),
+                    'delete_after_days': row['delete_after_days'],
+                    'active': row['active']
+                })
+            except Exception as e:
+                logger.error(f"Ошибка преобразования задачи: {e}")
+                continue
 
+        logger.info(f"Подготовлено {len(task_dicts)} задач для отображения")
+        
         # Определяем, показывать ли форму создания
         show_create_form = create is not None or error is not None
         
@@ -398,6 +396,7 @@ async def admin_panel(
 @app.post("/admin/create", summary="Create new task")
 async def admin_create_task(
     request: Request,
+    secret: Optional[str] = Form(None),
     chat_id: int = Form(...),
     message_text: str = Form(...),
     media_file_id: Optional[str] = Form(None),
@@ -407,8 +406,7 @@ async def admin_create_task(
     monthly_days: Optional[str] = Form(None),
     delete_after_days: Optional[int] = Form(None),
     pin: bool = Form(False),
-    notify: bool = Form(True),
-    secret: Optional[str] = Form(None)
+    notify: bool = Form(True)
 ):
     """Создаёт новую задачу из админки."""
     try:
@@ -533,6 +531,7 @@ async def admin_edit_form(
 @app.post("/admin/edit/{task_id}", summary="Save edited task")
 async def admin_save_edit(
     task_id: int,
+    secret: Optional[str] = Form(None),
     chat_id: int = Form(...),
     message_text: str = Form(...),
     media_file_id: Optional[str] = Form(None),
@@ -542,8 +541,7 @@ async def admin_save_edit(
     monthly_days: Optional[str] = Form(None),
     delete_after_days: Optional[int] = Form(None),
     pin: bool = Form(False),
-    notify: bool = Form(True),
-    secret: Optional[str] = Form(None)
+    notify: bool = Form(True)
 ):
     """Сохраняет отредактированную задачу."""
     try:
